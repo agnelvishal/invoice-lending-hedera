@@ -7,3 +7,5 @@ artifacts/
 cache/
 repos/
 *.log
+typechain-types/
+coverage/
