@@ -1,0 +1,14 @@
+{
+  "files.watcherExclude": {
+    "**/node_modules/**": true,
+    "**/repos/**": true,
+    "**/artifacts/**": true,
+    "**/cache/**": true,
+    "**/typechain-types/**": true,
+    "**/.git/objects/**": true
+  },
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/repos": true
+  }
+}

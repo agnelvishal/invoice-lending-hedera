@@ -11,18 +11,31 @@ Neither toolkit includes lending logic. The loan contract and the payment settle
 
 ## Status
 
-Early development. Nothing is deployed yet.
+Early development. Nothing is deployed on testnet yet (the ATS deploy is paused mid-way, see below).
 
 | Step | State |
 |---|---|
 | Testnet operator account | Done (ECDSA account, funded) |
 | ATS and Stablecoin Studio cloned as references (`repos/`) | Done |
-| ATS dependencies installed | In progress |
-| ATS contracts built and deployed to testnet | Not started |
+| ATS dependencies installed and contracts built | Done |
+| ATS contracts deployed to testnet | Paused at step 3 of 9 (facets); resumes from checkpoint |
 | Stablecoin Studio factory and stablecoin on testnet | Not started |
-| Loan / escrow contract | Not started |
+| `InvoiceLending` loan contract (`contracts/`) | Written, 9 unit tests passing against mocks |
+| `InvoiceLending` deployed to testnet | Not started |
+| End-to-end test on testnet (real invoice bond + stablecoin) | Not started |
 | Backend indexer | Not started |
 | Web app (SME, lender, customer views) | Not started |
+
+### Resuming the ATS testnet deploy
+
+The deploy script checkpoints each step under `repos/ats/packages/ats/contracts/deployments/hedera-testnet/.checkpoints/`, so it is safe to stop and re-run. Keep the machine awake (and plugged in) while it runs; it takes roughly 30 to 90 minutes on a slow connection.
+
+```bash
+cd repos/ats/packages/ats/contracts
+NODE_OPTIONS="--require $PWD/../../../../scripts/slow-network-patch.cjs" npm run deploy:newBlr:hedera:testnet
+```
+
+If it fails with a 502 or DNS error from the public RPC (Hashio), run it again.
 
 ## How it works
 
@@ -55,6 +68,23 @@ Early development. Nothing is deployed yet.
 - **Collateral:** ATS bond tokens with holds, not plain NFTs, so compliance rules (KYC, allowlists) apply to invoice tokens.
 - **Network:** testnet only. No real funds.
 
+## Loan contract
+
+`contracts/contracts/InvoiceLending.sol` (Solidity 0.8.24, OpenZeppelin 5):
+
+- **Lender pool:** lenders `deposit` stablecoin for shares and `withdraw` against idle cash. Interest raises share value; defaults write off principal.
+- **`requestLoan`:** the SME first creates an ATS hold on its invoice tokens naming the loan contract as `escrow`, then requests a loan. The contract checks the hold (escrow, amount, expiry) and caps principal at an advance rate of the invoice face value (default 80%).
+- **`fund`:** an underwriter approves; principal moves from the pool to the SME. A flat fee is fixed at funding (default 3%).
+- **`payInvoice`:** only the designated customer can pay. Payments go to lenders first (principal, then fee), the surplus goes to the SME, and the ATS hold is released as soon as lenders are fully repaid.
+- **`liquidate`:** after due date plus grace (default 3 days) anyone can execute the hold to the collateral receiver. Unrecovered principal is written off against the pool.
+- **Admin:** risk parameters (advance rate, fee, grace, collateral receiver) and pause.
+
+Run the tests (no network needed):
+
+```bash
+cd contracts && pnpm install && pnpm test
+```
+
 ## Planned stack
 
 - Solidity contracts with Hardhat
@@ -67,18 +97,21 @@ Early development. Nothing is deployed yet.
 ```
 .
 ├── README.md
-├── .env                 # testnet credentials (gitignored, never commit)
-├── repos/
-│   ├── ats/             # Asset Tokenization Studio (reference clone)
-│   └── sc/              # Stablecoin Studio (reference clone)
-└── deployments/         # deployed testnet addresses (planned)
+├── .env                        # testnet credentials (gitignored, never commit)
+├── contracts/                  # InvoiceLending, mocks, tests (Hardhat)
+├── scripts/
+│   └── slow-network-patch.cjs  # raises Node 20's 5s socket timeout for slow links
+├── repos/                      # gitignored reference clones
+│   ├── ats/                    # Asset Tokenization Studio
+│   └── sc/                     # Stablecoin Studio
+└── deployments/                # deployed testnet addresses (planned)
 ```
 
-Application code (contracts, backend, web) will be added as the project progresses.
+Backend and web app code will be added as the project progresses.
 
 ## Setup
 
-Requirements: Node.js 20+, npm 10+ (provided by `corepack`), and a Hedera testnet account (get one at https://portal.hedera.com).
+Requirements: Node.js 20+, pnpm and npm (via `corepack`), and a Hedera testnet account (get one at https://portal.hedera.com).
 
 Create `.env` in the project root (gitignored):
 
@@ -100,7 +133,7 @@ cd repos/ats && npm ci
 cd packages/ats/contracts && npm run build
 ```
 
-Deploy ATS to testnet (spends testnet HBAR):
+Deploy ATS to testnet (spends testnet HBAR; on a slow network use the `NODE_OPTIONS` patch shown above):
 
 ```bash
 npm run deploy:newBlr:hedera:testnet
