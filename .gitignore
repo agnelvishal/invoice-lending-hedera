@@ -9,3 +9,4 @@ repos/
 *.log
 typechain-types/
 coverage/
+demo/frames/

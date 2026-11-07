@@ -100,6 +100,13 @@ contract InvoiceLending is AccessControl, ReentrancyGuard, Pausable {
     error TooEarly();
     error InvalidParams();
 
+    /// @dev Hedera Token Service system contract.
+    address internal constant HTS = address(0x167);
+    int64 internal constant HTS_SUCCESS = 22;
+    int64 internal constant HTS_ALREADY_ASSOCIATED = 194;
+
+    error AssociationFailed(int64 responseCode);
+
     constructor(address stablecoin_, address admin, address collateralReceiver_) {
         if (stablecoin_ == address(0) || admin == address(0) || collateralReceiver_ == address(0)) revert InvalidParams();
         stablecoin = IERC20(stablecoin_);
@@ -107,6 +114,19 @@ contract InvoiceLending is AccessControl, ReentrancyGuard, Pausable {
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
         _grantRole(RISK_ADMIN_ROLE, admin);
         _grantRole(UNDERWRITER_ROLE, admin);
+    }
+
+    /// @notice Associate this contract with the stablecoin (HTS). On Hedera an account must be
+    ///         associated with a token before it can receive it. Idempotent; callable by anyone.
+    ///         On chains without the HTS system contract (local tests) this is a no-op.
+    function associateStablecoin() external {
+        (bool ok, bytes memory ret) = HTS.call(
+            abi.encodeWithSignature("associateToken(address,address)", address(this), address(stablecoin))
+        );
+        if (!ok) revert AssociationFailed(-1);
+        if (ret.length < 32) return; // no precompile (local network)
+        int64 code = abi.decode(ret, (int64));
+        if (code != HTS_SUCCESS && code != HTS_ALREADY_ASSOCIATED) revert AssociationFailed(code);
     }
 
     // ---------------------------------------------------------------- lender pool
@@ -133,7 +153,7 @@ contract InvoiceLending is AccessControl, ReentrancyGuard, Pausable {
 
     /// @notice Burn `shares` for stablecoin. Limited by idle cash (the rest is lent out).
     function withdraw(uint256 shares) external nonReentrant returns (uint256 amount) {
-        if (shares == 0) revert ZeroAmount();
+        if (shares == 0 || totalShares == 0) revert ZeroAmount();
         amount = (shares * totalAssets()) / totalShares;
         if (amount > idleCash) revert InsufficientLiquidity();
         sharesOf[msg.sender] -= shares;

@@ -150,6 +150,11 @@ describe("InvoiceLending", () => {
     expect((await lending.loans(1)).status).to.equal(5n);
   });
 
+  it("associateStablecoin is a harmless no-op without the HTS precompile", async () => {
+    const { lending } = await setup();
+    await lending.associateStablecoin();
+  });
+
   it("splits pool value fairly between lenders (shares)", async () => {
     const ctx = await setup();
     const { lending, lender, lender2, customer, admin } = ctx;

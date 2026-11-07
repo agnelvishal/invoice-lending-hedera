@@ -20,8 +20,9 @@ Early development. Nothing is deployed on testnet yet (the ATS deploy is paused 
 | ATS dependencies installed and contracts built | Done |
 | ATS contracts deployed to testnet | Paused at step 3 of 9 (facets); resumes from checkpoint |
 | Stablecoin Studio factory and stablecoin on testnet | Not started |
-| `InvoiceLending` loan contract (`contracts/`) | Written, 9 unit tests passing against mocks |
-| `InvoiceLending` deployed to testnet | Not started |
+| `InvoiceLending` loan contract (`contracts/`) | Written, 10 unit tests passing against mocks; HTS token association built in |
+| `InvoiceLending` deploy script (`contracts/scripts/deploy-lending.ts`) | Done, dry-run on local network; needs the stablecoin address |
+| `InvoiceLending` deployed to testnet | Not started (waiting for the stablecoin) |
 | End-to-end test on testnet (real invoice bond + stablecoin) | Not started |
 | Backend indexer | Not started |
 | Web app (SME, lender, customer views) | Not started |
@@ -77,13 +78,28 @@ If it fails with a 502 or DNS error from the public RPC (Hashio), run it again.
 - **`fund`:** an underwriter approves; principal moves from the pool to the SME. A flat fee is fixed at funding (default 3%).
 - **`payInvoice`:** only the designated customer can pay. Payments go to lenders first (principal, then fee), the surplus goes to the SME, and the ATS hold is released as soon as lenders are fully repaid.
 - **`liquidate`:** after due date plus grace (default 3 days) anyone can execute the hold to the collateral receiver. Unrecovered principal is written off against the pool.
+- **`associateStablecoin`:** on Hedera a contract must be associated with an HTS token before it can receive it. Call this once after deploying (the deploy script does).
 - **Admin:** risk parameters (advance rate, fee, grace, collateral receiver) and pause.
+
+On Hedera, SME, lender and customer accounts must also be associated with the stablecoin, and the collateral receiver must pass the invoice token's KYC/allowlist rules.
 
 Run the tests (no network needed):
 
 ```bash
 cd contracts && pnpm install && pnpm test
 ```
+
+Deploy to testnet once you have the stablecoin's EVM address (spends testnet HBAR; on a slow link use the `NODE_OPTIONS` patch shown above):
+
+```bash
+STABLECOIN_ADDRESS=0x... pnpm hardhat run scripts/deploy-lending.ts --network hedera-testnet
+```
+
+The address is saved to `deployments/testnet.json`.
+
+## Demo video
+
+`demo/demo.mp4` is a 57-second explainer built from the real test numbers and test output. It is slides, not a live testnet run. Regenerate it with `python3 demo/make_video.py` (needs ffmpeg and Pillow).
 
 ## Planned stack
 
@@ -99,12 +115,13 @@ cd contracts && pnpm install && pnpm test
 ├── README.md
 ├── .env                        # testnet credentials (gitignored, never commit)
 ├── contracts/                  # InvoiceLending, mocks, tests (Hardhat)
+├── demo/                       # demo.mp4 and the script that builds it
 ├── scripts/
 │   └── slow-network-patch.cjs  # raises Node 20's 5s socket timeout for slow links
 ├── repos/                      # gitignored reference clones
 │   ├── ats/                    # Asset Tokenization Studio
 │   └── sc/                     # Stablecoin Studio
-└── deployments/                # deployed testnet addresses (planned)
+└── deployments/                # deployed testnet addresses (testnet.json, written by deploy scripts)
 ```
 
 Backend and web app code will be added as the project progresses.
